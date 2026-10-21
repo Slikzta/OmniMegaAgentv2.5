@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { Octokit } from "octokit";
 import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 import { isGeminiLiveModel, testGeminiLiveWebSocket } from "./src/lib/gemini";
+import { PROVIDER_CONTENT_CAPABILITIES } from "./src/lib/providers";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,6 +110,7 @@ async function startServer() {
         selectedModel: store.configs.gemini?.selectedModel || "gemini-3-flash-preview",
         hasKey: Boolean(store.configs.gemini?.apiKey || process.env.GEMINI_API_KEY),
         isEnvKey: Boolean(!store.configs.gemini?.apiKey && process.env.GEMINI_API_KEY),
+        contentCapability: PROVIDER_CONTENT_CAPABILITIES.gemini,
         capabilities: {
           text: true,
           streaming: true,
@@ -125,6 +127,7 @@ async function startServer() {
         selectedModel: store.configs.openai?.selectedModel || "gpt-4o",
         baseUrl: store.configs.openai?.baseUrl || "https://api.openai.com/v1",
         hasKey: Boolean(store.configs.openai?.apiKey),
+        contentCapability: PROVIDER_CONTENT_CAPABILITIES.openai,
         capabilities: {
           text: true,
           streaming: true,
@@ -141,6 +144,7 @@ async function startServer() {
         selectedModel: store.configs.anthropic?.selectedModel || "claude-3-7-sonnet-latest",
         baseUrl: store.configs.anthropic?.baseUrl || "https://api.anthropic.com/v1",
         hasKey: Boolean(store.configs.anthropic?.apiKey),
+        contentCapability: PROVIDER_CONTENT_CAPABILITIES.anthropic,
         capabilities: {
           text: true,
           streaming: true,
@@ -157,6 +161,7 @@ async function startServer() {
         selectedModel: store.configs.custom?.selectedModel || "llama-3.3-70b-versatile",
         baseUrl: store.configs.custom?.baseUrl || "https://api.groq.com/openai/v1",
         hasKey: Boolean(store.configs.custom?.apiKey),
+        contentCapability: PROVIDER_CONTENT_CAPABILITIES.custom,
         capabilities: {
           text: true,
           streaming: true,
@@ -173,6 +178,7 @@ async function startServer() {
         selectedModel: store.configs.ollama?.selectedModel || "llama3.2",
         baseUrl: store.configs.ollama?.baseUrl || "http://localhost:11434",
         hasKey: true, // Ollama does not require key
+        contentCapability: PROVIDER_CONTENT_CAPABILITIES.ollama,
         capabilities: {
           text: true,
           streaming: true,
@@ -372,6 +378,7 @@ async function startServer() {
       systemInstruction = "",
       provider,
       model,
+      contentMode = "sfw",
       temperature = 0.7,
       topP = 0.9,
       topK = 40,

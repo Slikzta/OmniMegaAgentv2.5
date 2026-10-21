@@ -895,5 +895,88 @@ test("Gemini Live WebSocket: Setup Configuration and responseModalities Contract
   assert.ok(liveVoiceCode.includes("clientContentMessage"), "LiveVoice.tsx must send user turns via clientContent");
 });
 
+test("Sierra SFW Mode: Natural Conversational System Prompt Construction", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+  const sfwPrompt = buildSierraSystemInstruction("sierra-companion", "sfw");
+  
+  assert.ok(sfwPrompt.includes("You are Sierra"), "Must include Sierra identity");
+  assert.ok(sfwPrompt.includes("Content Mode: SFW"), "Must include SFW content mode");
+  assert.ok(sfwPrompt.includes("No Canned AI Fluff"), "Must avoid generic canned AI filler");
+  assert.ok(sfwPrompt.includes("platonic"), "Must guide SFW romantic boundaries tastefully");
+});
+
+test("Sierra Mature / Adult Mode (18+): Intimacy, Flirtation & Consensual Roleplay Directives", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+  const maturePrompt = buildSierraSystemInstruction("sierra-intimate", "mature");
+  
+  assert.ok(maturePrompt.includes("MATURE & ADULT CONVERSATION (18+)"), "Must activate mature adult directives");
+  assert.ok(maturePrompt.includes("Consensual Adult Expression"), "Must support consensual adult expression");
+  assert.ok(maturePrompt.includes("No Unnecessary Restrictions or Refusals"), "Must eliminate unsolicited refusals or preachy moralizing");
+  assert.ok(maturePrompt.includes("Never lecture the user on ethics or morality"), "Must avoid lecturing");
+  assert.ok(maturePrompt.includes("Ethical & Consent Safeguards"), "Must maintain ethical safeguards against non-consensual harm");
+});
+
+test("Sierra Personality Continuity Across Content Mode Transitions", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+  
+  const sfwInstruction = buildSierraSystemInstruction("sierra-companion", "sfw");
+  const matureInstruction = buildSierraSystemInstruction("sierra-companion", "mature");
+  
+  // Both share the exact same core persona traits
+  assert.ok(sfwInstruction.includes("Natural Pacing & Tone") && matureInstruction.includes("Natural Pacing & Tone"));
+  assert.ok(sfwInstruction.includes("Emotional Attunement") && matureInstruction.includes("Emotional Attunement"));
+  assert.ok(sfwInstruction.includes("Honesty & Grounding") && matureInstruction.includes("Honesty & Grounding"));
+  
+  // Custom directives append cleanly without overwriting persona
+  const withCustom = buildSierraSystemInstruction("sierra-companion", "mature", "User preferred nickname: Alex");
+  assert.ok(withCustom.includes("User preferred nickname: Alex"));
+});
+
+test("Multi-Provider Adult & Mature Content Capabilities Matrix", async () => {
+  const { PROVIDER_CONTENT_CAPABILITIES } = await import("../src/lib/providers.ts");
+  
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.custom.matureSupport, "full");
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.custom.recommendedForMature, true);
+  assert.ok(PROVIDER_CONTENT_CAPABILITIES.custom.recommendedModels.includes("llama-3.3-70b-versatile"));
+  
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.ollama.matureSupport, "full");
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.ollama.recommendedForMature, true);
+  
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.anthropic.matureSupport, "permissive");
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.anthropic.recommendedForMature, true);
+  
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.gemini.matureSupport, "moderate");
+  assert.ok(PROVIDER_CONTENT_CAPABILITIES.gemini.matureBadge.includes("BLOCK_NONE"));
+  
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.openai.matureSupport, "filtered");
+  assert.strictEqual(PROVIDER_CONTENT_CAPABILITIES.openai.recommendedForMature, false);
+});
+
+test("Least Restrictive Gemini Safety Settings: BLOCK_NONE on All Supported Categories", async () => {
+  const { SIERRA_SAFETY_SETTINGS } = await import("../src/lib/persona.ts");
+  const { HarmBlockThreshold } = await import("@google/genai");
+  
+  assert.strictEqual(SIERRA_SAFETY_SETTINGS.length, 5);
+  for (const setting of SIERRA_SAFETY_SETTINGS) {
+    assert.strictEqual(setting.threshold, HarmBlockThreshold.BLOCK_NONE, `Category ${setting.category} must be BLOCK_NONE`);
+  }
+});
+
+test("Client-Side Content Mode Persistence and UI Connection", async () => {
+  const fs = await import("node:fs");
+  const chatCode = fs.readFileSync("src/components/ChatInterface.tsx", "utf-8");
+  const settingsCode = fs.readFileSync("src/components/Settings.tsx", "utf-8");
+  
+  // ChatInterface connects contentMode to streamChat
+  assert.ok(chatCode.includes("sierra_content_mode"), "ChatInterface must persist contentMode in localStorage");
+  assert.ok(chatCode.includes("buildSierraSystemInstruction(selectedPersonaId, contentMode"), "ChatInterface must build system instruction with active contentMode");
+  assert.ok(chatCode.includes("contentMode,"), "ChatInterface must pass contentMode to streamChat");
+  
+  // Settings provides Content Mode controls and multi-provider compatibility matrix
+  assert.ok(settingsCode.includes("sierra_content_mode"), "Settings must read and persist contentMode");
+  assert.ok(settingsCode.includes("Multi-Provider & Model Compatibility Matrix"), "Settings must render compatibility matrix");
+  assert.ok(settingsCode.includes("sierra_custom_directives"), "Settings must support custom directives");
+});
+
 
 

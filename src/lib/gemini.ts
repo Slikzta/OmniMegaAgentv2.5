@@ -425,7 +425,14 @@ export const VIDEO_MODELS = [
   { id: MODELS.VIDEO_PRO, name: "Veo Pro (Preview)" },
 ] as const;
 
-export { SIERRA_SAFETY_SETTINGS, SIERRA_CORE_PERSONA, SIERRA_PERSONAS } from './persona';
+export { 
+  SIERRA_SAFETY_SETTINGS, 
+  SIERRA_CORE_PERSONA, 
+  SIERRA_PERSONAS,
+  CONTENT_MODES,
+  buildSierraSystemInstruction,
+} from './persona';
+export type { ContentMode, ContentModeConfig } from './persona';
 
 export const CHAT_MODELS = [
   { id: MODELS.CHAT_FLASH, name: "Gemini 3 Flash", badge: "Fast & Natural" },

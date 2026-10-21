@@ -27,11 +27,17 @@ import {
   ArrowRight, 
   RefreshCw,
   Globe,
-  Volume2
+  Volume2,
+  Flame,
+  Heart,
+  Lock,
+  MessageCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { CONTENT_MODES, ContentMode, SIERRA_CORE_PERSONA, SIERRA_PERSONAS } from '../lib/persona';
+import { PROVIDER_CONTENT_CAPABILITIES } from '../lib/providers';
 
 import { DEFAULT_LIVE_WEBSOCKET_URL } from '../lib/gemini';
 
@@ -121,8 +127,31 @@ const PROVIDER_METADATA: Record<string, {
 export default function SettingsView({ onNavigateToChat }: SettingsProps) {
   const [config, setConfig] = useState<ProvidersConfigResponse | null>(null);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('gemini');
-  const [activeTab, setActiveTab] = useState<'providers' | 'mobile' | 'voice'>('providers');
+  const [activeTab, setActiveTab] = useState<'providers' | 'voice' | 'sierra' | 'mobile'>('providers');
   const [isLoading, setIsLoading] = useState(true);
+
+  // Sierra Content Mode & Directives State
+  const [contentMode, setContentMode] = useState<ContentMode>(() => {
+    return (typeof localStorage !== 'undefined' && (localStorage.getItem('sierra_content_mode') as ContentMode)) || 'sfw';
+  });
+  const [customDirectives, setCustomDirectives] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' && localStorage.getItem('sierra_custom_directives')) || '';
+  });
+
+  const handleContentModeSelect = (mode: ContentMode) => {
+    setContentMode(mode);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_content_mode', mode);
+    }
+    toast.success(`Sierra content mode set to: ${CONTENT_MODES[mode].name}`);
+  };
+
+  const handleSaveCustomDirectives = () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_custom_directives', customDirectives);
+    }
+    toast.success("Custom companion directives saved successfully!");
+  };
 
   // Form fields for currently selected provider
   const [formModel, setFormModel] = useState<string>('');
@@ -316,6 +345,18 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
           AI Providers & Engines
         </button>
         <button
+          onClick={() => setActiveTab('sierra')}
+          className={cn(
+            "px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5",
+            activeTab === 'sierra' 
+              ? "bg-rose-600/20 text-rose-300 border border-rose-500/40" 
+              : "text-zinc-400 hover:text-white hover:bg-zinc-900"
+          )}
+        >
+          <Flame className="w-3.5 h-3.5 text-rose-400" />
+          Sierra & Content Modes
+        </button>
+        <button
           onClick={() => setActiveTab('voice')}
           className={cn(
             "px-4 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all",
@@ -383,6 +424,22 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
                       )}
                     </div>
                     <p className="text-xs text-zinc-400 mt-1 line-clamp-1">{meta.badge}</p>
+                    {PROVIDER_CONTENT_CAPABILITIES[id] && (
+                      <div className="mt-1.5 flex items-center gap-1.5">
+                        <span className={cn(
+                          "text-[9px] font-semibold px-2 py-0.5 rounded-full border",
+                          PROVIDER_CONTENT_CAPABILITIES[id].matureSupport === 'full' 
+                            ? "bg-rose-500/15 text-rose-300 border-rose-500/30" 
+                            : PROVIDER_CONTENT_CAPABILITIES[id].matureSupport === 'permissive'
+                            ? "bg-purple-500/15 text-purple-300 border-purple-500/30"
+                            : PROVIDER_CONTENT_CAPABILITIES[id].matureSupport === 'moderate'
+                            ? "bg-blue-500/15 text-blue-300 border-blue-500/30"
+                            : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                        )}>
+                          {PROVIDER_CONTENT_CAPABILITIES[id].matureBadge}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-3 mt-3 pt-3 border-t border-zinc-800/60 text-[11px] text-zinc-400">
                       <span>Model: <strong className="text-zinc-200 font-medium">{provInfo?.selectedModel || meta.models[0]?.name}</strong></span>
                       {provInfo?.hasKey && (
@@ -458,6 +515,26 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
                       </div>
                     </div>
                   </div>
+
+                  {/* Conversational & Adult Capability Callout */}
+                  {PROVIDER_CONTENT_CAPABILITIES[selectedProviderId] && (
+                    <div className="p-4 rounded-xl bg-zinc-950 border border-zinc-800 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-rose-400" />
+                        <span className="text-xs font-bold text-zinc-200">
+                          Conversational & Adult Capability: {PROVIDER_CONTENT_CAPABILITIES[selectedProviderId].matureBadge}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400 leading-relaxed">
+                        {PROVIDER_CONTENT_CAPABILITIES[selectedProviderId].notes}
+                      </p>
+                      {PROVIDER_CONTENT_CAPABILITIES[selectedProviderId].recommendedModels.length > 0 && (
+                        <div className="text-[11px] text-zinc-500 pt-0.5">
+                          Recommended Models: <span className="text-zinc-300 font-mono">{PROVIDER_CONTENT_CAPABILITIES[selectedProviderId].recommendedModels.join(", ")}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Model Selection */}
                   <div className="space-y-2">
@@ -660,6 +737,191 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
                 </CardFooter>
               </Card>
             </div>
+          </div>
+        ) : activeTab === 'sierra' ? (
+          /* Sierra Persona & Content Modes Tab */
+          <div className="space-y-6">
+            <Card className="bg-zinc-900/60 border-zinc-800 shadow-xl rounded-2xl p-6">
+              <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                <Flame className="w-5 h-5 text-rose-400" />
+                Sierra Conversational Assistant & Content Handling
+              </CardTitle>
+              <CardDescription className="text-xs text-zinc-400 mt-1">
+                Configure Sierra's conversational style, adult/mature capabilities, multi-provider model selection, and privacy controls.
+              </CardDescription>
+
+              {/* Mode Selection Grid */}
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* SFW Mode Card */}
+                <div 
+                  onClick={() => handleContentModeSelect('sfw')}
+                  className={cn(
+                    "p-5 rounded-2xl border cursor-pointer transition-all space-y-3 relative",
+                    contentMode === 'sfw'
+                      ? "bg-emerald-950/20 border-emerald-500/50 shadow-lg ring-1 ring-emerald-500/20"
+                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                        <ShieldCheck className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white">SFW Mode</h4>
+                        <span className="text-[10px] text-emerald-400 font-medium">Standard Conversational</span>
+                      </div>
+                    </div>
+                    {contentMode === 'sfw' && (
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                        Active Mode
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    Natural, intelligent, unrestricted everyday conversation. Companionship, humor, technical discussions, coding, science, philosophy, business, and creative writing.
+                  </p>
+                  <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Tone: Warm, sharp, empathetic</span>
+                    <Button 
+                      size="sm" 
+                      variant={contentMode === 'sfw' ? "default" : "outline"}
+                      className={cn("h-7 text-xs rounded-lg", contentMode === 'sfw' ? "bg-emerald-600 text-white" : "border-zinc-700 text-zinc-300")}
+                      onClick={(e) => { e.stopPropagation(); handleContentModeSelect('sfw'); }}
+                    >
+                      {contentMode === 'sfw' ? "Selected" : "Select SFW"}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Mature / Adult Mode Card */}
+                <div 
+                  onClick={() => handleContentModeSelect('mature')}
+                  className={cn(
+                    "p-5 rounded-2xl border cursor-pointer transition-all space-y-3 relative",
+                    contentMode === 'mature'
+                      ? "bg-rose-950/25 border-rose-500/50 shadow-lg ring-1 ring-rose-500/20"
+                      : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400">
+                        <Flame className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white">Mature / Adult Mode (18+)</h4>
+                        <span className="text-[10px] text-rose-400 font-medium">Flirtation, Intimacy & Consensual Roleplay</span>
+                      </div>
+                    </div>
+                    {contentMode === 'mature' && (
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        Active Mode
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    Adult-oriented discussions, flirtation, emotional intimacy, sensual banter, and consensual creative roleplay. No unnecessary refusals, moralizing, or artificial lectures.
+                  </p>
+                  <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>Tone: Passionate, candid, affectionate</span>
+                    <Button 
+                      size="sm" 
+                      variant={contentMode === 'mature' ? "default" : "outline"}
+                      className={cn("h-7 text-xs rounded-lg", contentMode === 'mature' ? "bg-rose-600 text-white" : "border-zinc-700 text-zinc-300")}
+                      onClick={(e) => { e.stopPropagation(); handleContentModeSelect('mature'); }}
+                    >
+                      {contentMode === 'mature' ? "Selected" : "Select Mature 18+"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Multi-Provider Compatibility Matrix */}
+              <div className="mt-8 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-purple-400" />
+                    Multi-Provider & Model Compatibility Matrix
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Providers and models vary in their alignment and content policies. Select the model best suited for your intended experience.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {Object.entries(PROVIDER_CONTENT_CAPABILITIES).map(([pId, cap]) => (
+                    <div key={pId} className="p-4 rounded-xl bg-zinc-950 border border-zinc-800/80 space-y-2 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-xs text-white capitalize">{pId === 'custom' ? 'Custom / OpenRouter' : pId}</span>
+                          <span className={cn(
+                            "text-[9px] font-bold px-2 py-0.5 rounded-full border",
+                            cap.matureSupport === 'full' 
+                              ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                              : cap.matureSupport === 'permissive'
+                              ? "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                              : cap.matureSupport === 'moderate'
+                              ? "bg-blue-500/20 text-blue-300 border-blue-500/40"
+                              : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                          )}>
+                            {cap.matureBadge}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
+                          {cap.notes}
+                        </p>
+                      </div>
+                      <div className="pt-2 border-t border-zinc-900 text-[10px] text-zinc-500">
+                        <span className="font-medium text-zinc-400">Best models: </span>
+                        <span className="font-mono text-zinc-300">{cap.recommendedModels.slice(0, 2).join(", ")}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Directives / Tone Instructions */}
+              <div className="mt-8 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageCircle className="w-3.5 h-3.5 text-purple-400" />
+                    Custom Directives & Boundaries for Sierra
+                  </label>
+                  <span className="text-[11px] text-zinc-500">Persists across sessions</span>
+                </div>
+                <textarea
+                  value={customDirectives}
+                  onChange={(e) => setCustomDirectives(e.target.value)}
+                  placeholder="Add custom preferences, nicknames, intimacy pacing, or specific topics for Sierra to incorporate into her conversation..."
+                  className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl p-3 text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none min-h-[90px] resize-y font-sans"
+                />
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    onClick={handleSaveCustomDirectives}
+                    className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-4 rounded-lg"
+                  >
+                    Save Custom Directives
+                  </Button>
+                </div>
+              </div>
+
+              {/* Privacy & Confidentiality Guarantee */}
+              <div className="mt-6 p-4 rounded-xl bg-purple-950/20 border border-purple-800/30 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center shrink-0 text-purple-300 mt-0.5">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-purple-200">
+                    Privacy, Security & Zero Credential Exposure
+                  </h4>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">
+                    All chat conversations, mature discussions, and custom directives are protected under your private session. Your API keys and provider credentials are securely managed on the server or on-device persistent storage and never exposed in client bundles, public repositories, or client-side telemetry.
+                  </p>
+                </div>
+              </div>
+            </Card>
           </div>
         ) : activeTab === 'voice' ? (
           /* Live Voice & Audio Architecture Tab */

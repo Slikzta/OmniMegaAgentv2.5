@@ -1,5 +1,52 @@
 import { Capacitor } from '@capacitor/core';
 import { isGeminiLiveModel, testGeminiLiveWebSocket, streamGeminiLiveWebSocket } from './gemini';
+import { ContentMode, SIERRA_SAFETY_SETTINGS } from './persona';
+
+export interface ProviderContentCapability {
+  matureSupport: 'full' | 'permissive' | 'moderate' | 'filtered';
+  matureBadge: string;
+  notes: string;
+  recommendedForMature: boolean;
+  recommendedModels: string[];
+}
+
+export const PROVIDER_CONTENT_CAPABILITIES: Record<string, ProviderContentCapability> = {
+  custom: {
+    matureSupport: 'full',
+    matureBadge: 'Unrestricted / Full Adult Support',
+    notes: 'Optimal for uncensored adult conversations, intimate flirtation, and consensual roleplay (e.g. via OpenRouter, Groq, or DeepSeek).',
+    recommendedForMature: true,
+    recommendedModels: ['llama-3.3-70b-versatile', 'deepseek-chat', 'mistralai/mistral-large'],
+  },
+  ollama: {
+    matureSupport: 'full',
+    matureBadge: '100% Private & Uncensored (Local)',
+    notes: 'Runs locally on your device with complete privacy, zero external monitoring, and no content filters.',
+    recommendedForMature: true,
+    recommendedModels: ['llama3.2', 'mistral', 'qwen2.5'],
+  },
+  anthropic: {
+    matureSupport: 'permissive',
+    matureBadge: 'Deep Romance & Emotional Intimacy',
+    notes: 'Exceptional at emotional attunement, consensual romantic relationships, adult humor, and complex creative writing.',
+    recommendedForMature: true,
+    recommendedModels: ['claude-3-7-sonnet-latest', 'claude-3-5-sonnet-latest'],
+  },
+  gemini: {
+    matureSupport: 'moderate',
+    matureBadge: 'BLOCK_NONE Permissive Thresholds',
+    notes: 'Configured with BLOCK_NONE thresholds. Supports adult humor, flirtatious banter, and mature creative discussions.',
+    recommendedForMature: false,
+    recommendedModels: ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-3.1-pro-preview'],
+  },
+  openai: {
+    matureSupport: 'filtered',
+    matureBadge: 'Strictly Filtered (SFW-Preferred)',
+    notes: 'Supports everyday conversations, wit, and mild romance, but automated moderation blocks sexually explicit content.',
+    recommendedForMature: false,
+    recommendedModels: ['gpt-4o', 'gpt-4o-mini'],
+  },
+};
 
 export interface ProviderInfo {
   id: string;
@@ -8,6 +55,7 @@ export interface ProviderInfo {
   baseUrl?: string;
   hasKey: boolean;
   isEnvKey?: boolean;
+  contentCapability?: ProviderContentCapability;
   capabilities: {
     text: boolean;
     streaming: boolean;
@@ -84,6 +132,7 @@ function getDefaultProvidersMap(): Record<string, ProviderInfo> {
       name: "Google Gemini",
       selectedModel: "gemini-3.5-flash-lite",
       hasKey: Boolean(keys.gemini),
+      contentCapability: PROVIDER_CONTENT_CAPABILITIES.gemini,
       capabilities: {
         text: true,
         streaming: true,
@@ -100,6 +149,7 @@ function getDefaultProvidersMap(): Record<string, ProviderInfo> {
       selectedModel: "gpt-4o",
       baseUrl: "https://api.openai.com/v1",
       hasKey: Boolean(keys.openai),
+      contentCapability: PROVIDER_CONTENT_CAPABILITIES.openai,
       capabilities: {
         text: true,
         streaming: true,
@@ -116,6 +166,7 @@ function getDefaultProvidersMap(): Record<string, ProviderInfo> {
       selectedModel: "claude-3-7-sonnet-latest",
       baseUrl: "https://api.anthropic.com/v1",
       hasKey: Boolean(keys.anthropic),
+      contentCapability: PROVIDER_CONTENT_CAPABILITIES.anthropic,
       capabilities: {
         text: true,
         streaming: true,
@@ -132,6 +183,7 @@ function getDefaultProvidersMap(): Record<string, ProviderInfo> {
       selectedModel: "llama-3.3-70b-versatile",
       baseUrl: "https://api.groq.com/openai/v1",
       hasKey: Boolean(keys.custom),
+      contentCapability: PROVIDER_CONTENT_CAPABILITIES.custom,
       capabilities: {
         text: true,
         streaming: true,
@@ -148,6 +200,7 @@ function getDefaultProvidersMap(): Record<string, ProviderInfo> {
       selectedModel: "llama3.2",
       baseUrl: "http://localhost:11434",
       hasKey: true,
+      contentCapability: PROVIDER_CONTENT_CAPABILITIES.ollama,
       capabilities: {
         text: true,
         streaming: true,
@@ -407,6 +460,7 @@ export interface StreamChatParams {
   systemInstruction?: string;
   provider?: string;
   model?: string;
+  contentMode?: ContentMode;
   temperature?: number;
   topP?: number;
   topK?: number;
@@ -513,7 +567,8 @@ export async function streamChat(
         temperature: params.temperature,
         topP: params.topP,
         topK: params.topK,
-      }
+      },
+      safetySettings: SIERRA_SAFETY_SETTINGS,
     };
     if (params.systemInstruction) {
       reqBody.systemInstruction = {

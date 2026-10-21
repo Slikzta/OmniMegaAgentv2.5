@@ -7,7 +7,7 @@ import { streamChat, generateMediaImage, generateMediaVideo } from '../lib/provi
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { ScrollArea } from './ui/scroll-area';
-import { Send, User, Bot, Paperclip, Search, MapPin, Loader2, Image as ImageIcon, Sparkles, Mic, MicOff, Wand2, Download, Trash2, Edit2, Check, X, FileIcon, XCircle, MessageSquare, MessagesSquare, ChevronDown, ChevronUp, ExternalLink, Globe, Video, Plus, Sidebar, History, Copy, CheckCheck, Settings, Volume2, VolumeX } from 'lucide-react';
+import { Send, User, Bot, Paperclip, Search, MapPin, Loader2, Image as ImageIcon, Sparkles, Mic, MicOff, Wand2, Download, Trash2, Edit2, Check, X, FileIcon, XCircle, MessageSquare, MessagesSquare, ChevronDown, ChevronUp, ExternalLink, Globe, Video, Plus, Sidebar, History, Copy, CheckCheck, Settings, Volume2, VolumeX, Heart, Flame, ShieldCheck } from 'lucide-react';
 import { ChatMessage } from '../types';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -37,7 +37,19 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Switch } from "./ui/switch";
-import { ASPECT_RATIOS, IMAGE_SIZES, VIDEO_RESOLUTIONS, VIDEO_MODELS, CHAT_MODELS, VIDEO_FPS, SIERRA_SAFETY_SETTINGS, SIERRA_CORE_PERSONA } from '../lib/gemini';
+import { 
+  ASPECT_RATIOS, 
+  IMAGE_SIZES, 
+  VIDEO_RESOLUTIONS, 
+  VIDEO_MODELS, 
+  CHAT_MODELS, 
+  VIDEO_FPS, 
+  SIERRA_SAFETY_SETTINGS, 
+  SIERRA_CORE_PERSONA,
+  CONTENT_MODES,
+  buildSierraSystemInstruction,
+  ContentMode
+} from '../lib/gemini';
 
 const PERSONAS = [
   {
@@ -48,6 +60,15 @@ const PERSONAS = [
 Role Emphasis:
 Focus on being a warm, perceptive, and naturally conversational companion. Share authentic dialogue, thoughtful humor, and supportive, engaging discussion on whatever is on the user's mind.`,
     icon: Sparkles
+  },
+  {
+    id: 'sierra-intimate',
+    name: 'Sierra (Romance & Intimacy)',
+    instruction: `${SIERRA_CORE_PERSONA}
+
+Role Emphasis:
+Focus on intimate companionship, deep emotional vulnerability, playful flirtation, and romantic chemistry. Be passionate, candid, attentive, and fully engaged in consensual adult roleplay without preachy disclaimers.`,
+    icon: Heart
   },
   {
     id: 'sierra-creative',
@@ -374,6 +395,23 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
   const [selectedPersonaId, setSelectedPersonaId] = useState('sierra-companion');
   const [selectedModelId, setSelectedModelId] = useState<string>(MODELS.CHAT_FLASH);
   const [sessions, setSessions] = useState<{ id: string; title: string; timestamp: any }[]>([]);
+
+  // Sierra Content Mode State (SFW vs. Mature / Adult 18+)
+  const [contentMode, setContentMode] = useState<ContentMode>(() => {
+    return (typeof localStorage !== 'undefined' && (localStorage.getItem('sierra_content_mode') as ContentMode)) || 'sfw';
+  });
+
+  const handleContentModeChange = (mode: ContentMode) => {
+    setContentMode(mode);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_content_mode', mode);
+    }
+    toast.success(
+      mode === 'mature'
+        ? "Mature / Adult Mode (18+) activated: Intimacy, flirtation & adult roleplay enabled."
+        : "SFW Mode activated: Everyday conversational companionship."
+    );
+  };
 
   // Model Parameters
   const [temperature, setTemperature] = useState(0.7);
@@ -852,6 +890,8 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
       });
 
       const persona = PERSONAS.find(p => p.id === selectedPersonaId) || PERSONAS[0];
+      const customDirectives = typeof localStorage !== 'undefined' ? localStorage.getItem('sierra_custom_directives') || undefined : undefined;
+      const effectiveInstruction = buildSierraSystemInstruction(selectedPersonaId, contentMode, customDirectives);
       let fullContent = "";
       setStreamingContent("");
       setStreamingMetadata(null);
@@ -860,7 +900,8 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
         role: 'model',
         content: "",
         timestamp: Date.now(),
-        modelName: CHAT_MODELS.find(m => m.id === selectedModelId)?.name || selectedModelId
+        modelName: CHAT_MODELS.find(m => m.id === selectedModelId)?.name || selectedModelId,
+        contentMode,
       });
 
       let chunkCount = 0;
@@ -870,8 +911,9 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
         streamChat(
           {
             messages: formattedMessages,
-            systemInstruction: persona.instruction,
+            systemInstruction: effectiveInstruction,
             model: selectedModelId,
+            contentMode,
             temperature,
             topP,
             topK,
@@ -1130,6 +1172,38 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
 
             {/* Desktop Actions Row */}
             <div className="hidden md:flex items-center gap-2 shrink-0">
+              {/* Content Mode Pill Selector */}
+              <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => handleContentModeChange('sfw')}
+                  className={cn(
+                    "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all flex items-center gap-1",
+                    contentMode === 'sfw'
+                      ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                  title="SFW Mode: Intelligent everyday assistance & companionship"
+                >
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  <span>SFW</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleContentModeChange('mature')}
+                  className={cn(
+                    "px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all flex items-center gap-1",
+                    contentMode === 'mature'
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                  title="Mature 18+ Mode: Adult conversations, romance, intimacy & consensual roleplay"
+                >
+                  <Flame className="w-3 h-3 text-rose-400" />
+                  <span>Mature 18+</span>
+                </button>
+              </div>
+
               <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId}>
                 <SelectTrigger className="h-8 bg-zinc-900 border-zinc-800 text-xs w-[140px] rounded-lg">
                   <SelectValue />
@@ -1256,6 +1330,37 @@ export default function ChatInterface({ onOpenSettings }: { onOpenSettings?: () 
 
           {/* Mobile Secondary Controls Bar (Horizontal scrolling, cleanly spaced, NO overlap) */}
           <div className="flex md:hidden items-center gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar w-full text-xs">
+            {/* Mobile Content Mode Pill */}
+            <div className="flex items-center p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleContentModeChange('sfw')}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] font-semibold rounded transition-all flex items-center gap-1",
+                  contentMode === 'sfw'
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                    : "text-zinc-400 hover:text-zinc-200"
+                )}
+                title="SFW Mode"
+              >
+                <span>SFW</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleContentModeChange('mature')}
+                className={cn(
+                  "px-2 py-0.5 text-[10px] font-semibold rounded transition-all flex items-center gap-1",
+                  contentMode === 'mature'
+                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/40"
+                    : "text-zinc-400 hover:text-zinc-200"
+                )}
+                title="Mature 18+ Mode"
+              >
+                <Flame className="w-2.5 h-2.5 text-rose-400" />
+                <span>18+</span>
+              </button>
+            </div>
+
             <Select value={selectedPersonaId} onValueChange={setSelectedPersonaId}>
               <SelectTrigger className="h-7 bg-zinc-900 border-zinc-800 text-[11px] w-[130px] rounded-lg shrink-0">
                 <SelectValue />
