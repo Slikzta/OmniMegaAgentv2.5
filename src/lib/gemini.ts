@@ -430,9 +430,15 @@ export {
   SIERRA_CORE_PERSONA, 
   SIERRA_PERSONAS,
   CONTENT_MODES,
+  LEADERSHIP_MODES,
+  detectLeadershipInstruction,
   buildSierraSystemInstruction,
+  resolvePersona,
+  resolveContentMode,
+  resolveLeadershipMode,
 } from './persona';
-export type { ContentMode, ContentModeConfig } from './persona';
+export type { ContentMode, ContentModeConfig, LeadershipMode, LeadershipModeConfig, CustomPersonaTraits } from './persona';
+
 
 export const CHAT_MODELS = [
   { id: MODELS.CHAT_FLASH, name: "Gemini 3 Flash", badge: "Fast & Natural" },

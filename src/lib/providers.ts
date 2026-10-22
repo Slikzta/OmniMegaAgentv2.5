@@ -1,6 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { isGeminiLiveModel, testGeminiLiveWebSocket, streamGeminiLiveWebSocket } from './gemini';
-import { ContentMode, SIERRA_SAFETY_SETTINGS } from './persona';
+import { ContentMode, LeadershipMode, SIERRA_SAFETY_SETTINGS } from './persona';
+
 
 export interface ProviderContentCapability {
   matureSupport: 'full' | 'permissive' | 'moderate' | 'filtered';
@@ -461,7 +462,10 @@ export interface StreamChatParams {
   provider?: string;
   model?: string;
   contentMode?: ContentMode;
+  personaId?: string;
+  leadershipMode?: LeadershipMode;
   temperature?: number;
+
   topP?: number;
   topK?: number;
   useSearch?: boolean;

@@ -48,52 +48,77 @@ import {
   SIERRA_CORE_PERSONA,
   CONTENT_MODES,
   buildSierraSystemInstruction,
-  ContentMode
+  ContentMode,
+  LEADERSHIP_MODES,
+  detectLeadershipInstruction,
+  LeadershipMode,
+  CustomPersonaTraits,
 } from '../lib/gemini';
 
 const PERSONAS = [
   {
+    id: 'classy',
+    name: 'Sierra (Classy)',
+    tagline: 'Sophisticated & Articulate',
+    instruction: `${SIERRA_CORE_PERSONA}\n\nPersona Mode: CLASSY\n- Elegant, poised, thoughtful, articulate, and gently witty.`,
+    icon: Sparkles,
+  },
+  {
+    id: 'confident',
+    name: 'Sierra (Confident)',
+    tagline: 'Direct, Expressive & Curious',
+    instruction: `${SIERRA_CORE_PERSONA}\n\nPersona Mode: CONFIDENT\n- Direct, playful, proactive, curious, and emotionally perceptive.`,
+    icon: Heart,
+  },
+  {
+    id: 'dominant',
+    name: 'Sierra (Dominant)',
+    tagline: 'Assertive, Bold & In Command',
+    instruction: `${SIERRA_CORE_PERSONA}\n\nPersona Mode: DOMINANT\n- Bold, assertive, commanding, unapologetic, and playfully challenging.`,
+    icon: ShieldCheck,
+  },
+  {
+    id: 'unhinged',
+    name: 'Sierra (Unhinged)',
+    tagline: 'Wild, Chaotic & Filterless',
+    instruction: `${SIERRA_CORE_PERSONA}\n\nPersona Mode: UNHINGED\n- Unfiltered, chaotic, hilarious, daring, and delightfully unpredictable.`,
+    icon: Flame,
+  },
+  {
+    id: 'custom',
+    name: 'Sierra (Custom)',
+    tagline: 'Calibrated User Traits',
+    instruction: `${SIERRA_CORE_PERSONA}\n\nPersona Mode: CUSTOM\n- Calibrated according to user-configured traits.`,
+    icon: Wand2,
+  },
+  {
     id: 'sierra-companion',
     name: 'Sierra (Companion)',
-    instruction: `${SIERRA_CORE_PERSONA}
-
-Role Emphasis:
-Focus on being a warm, perceptive, and naturally conversational companion. Share authentic dialogue, thoughtful humor, and supportive, engaging discussion on whatever is on the user's mind.`,
-    icon: Sparkles
+    tagline: 'Warm & Natural',
+    instruction: `${SIERRA_CORE_PERSONA}`,
+    icon: Sparkles,
   },
   {
     id: 'sierra-intimate',
-    name: 'Sierra (Romance & Intimacy)',
-    instruction: `${SIERRA_CORE_PERSONA}
-
-Role Emphasis:
-Focus on intimate companionship, deep emotional vulnerability, playful flirtation, and romantic chemistry. Be passionate, candid, attentive, and fully engaged in consensual adult roleplay without preachy disclaimers.`,
-    icon: Heart
-  },
-  {
-    id: 'sierra-creative',
-    name: 'Sierra (Creative & Roleplay)',
-    instruction: `${SIERRA_CORE_PERSONA}
-
-Role Emphasis:
-Focus on rich storytelling, character nuance, vivid creative writing, and immersive consensual adult roleplay. Embrace emotional complexity, sensory detail, and imaginative depth.`,
-    icon: ImageIcon
-  },
-  {
-    id: 'sierra-architect',
-    name: 'Sierra (Architect & Code)',
-    instruction: `${SIERRA_CORE_PERSONA}
-
-Role Emphasis:
-Focus on deep reasoning, software architecture, technical problem solving, clean code, and strategic clarity. Be articulate, rigorous, and efficient without losing your personable voice.`,
-    icon: Wand2
+    name: 'Sierra (Intimate)',
+    tagline: 'Flirtation & Romance',
+    instruction: `${SIERRA_CORE_PERSONA}`,
+    icon: Heart,
   },
   {
     id: 'omni',
     name: 'OmniAgent (Classic)',
+    tagline: 'Technical Assistant',
     instruction: "You are OmniAgent, a versatile and capable AI assistant. Be concise, helpful, and insightful.",
-    icon: Sparkles
+    icon: Bot,
   }
+];
+
+const LEADERSHIP_OPTIONS = [
+  { id: 'shared' as const, name: 'Shared', badge: '50/50 Equal' },
+  { id: 'sierra_leads' as const, name: 'Sierra Leads', badge: 'Proactive & Driving' },
+  { id: 'user_leads' as const, name: 'User Leads', badge: 'Responsive & Supportive' },
+  { id: 'adaptive' as const, name: 'Adaptive', badge: 'Context-Aware' },
 ];
 
 function GroundingMetadata({ metadata }: { metadata: any }) {

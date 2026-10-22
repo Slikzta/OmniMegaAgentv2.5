@@ -379,7 +379,10 @@ async function startServer() {
       provider,
       model,
       contentMode = "sfw",
+      personaId = "classy",
+      leadershipMode = "shared",
       temperature = 0.7,
+
       topP = 0.9,
       topK = 40,
       useSearch = false,

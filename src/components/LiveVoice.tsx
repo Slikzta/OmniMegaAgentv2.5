@@ -42,7 +42,13 @@ export default function LiveVoice() {
   const [userSpeechDetected, setUserSpeechDetected] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<'Aoede' | 'Zephyr' | 'Kore' | 'Puck'>('Aoede');
   const [voiceModel, setVoiceModel] = useState<string>(() => {
-    return (typeof localStorage !== 'undefined' && localStorage.getItem('sierra_live_voice_model')) || 'gemini-3.8-live';
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('sierra_live_voice_model');
+      if (stored && isGeminiLiveModel(stored)) {
+        return stored;
+      }
+    }
+    return 'gemini-3.8-live';
   });
   const [customVoiceModel, setCustomVoiceModel] = useState<string>(() => {
     return (typeof localStorage !== 'undefined' && localStorage.getItem('sierra_live_voice_custom_model')) || '';
@@ -253,6 +259,45 @@ export default function LiveVoice() {
   const RECOGNITION_TIMEOUT_MS = 12000;
   const PLAYBACK_COOLDOWN_MS = 750;
 
+  const isMountedRef = useRef<boolean>(true);
+  const turnCompletePendingRef = useRef<boolean>(false);
+  const turnCompleteTimerRef = useRef<any>(null);
+  const startSpeechToTextRef = useRef<() => Promise<void>>(async () => {});
+
+  const handleTurnAudioCompleted = () => {
+    if (!turnCompletePendingRef.current) return;
+    if (activeSourcesRef.current.length > 0) return;
+    turnCompletePendingRef.current = false;
+
+    if (turnCompleteTimerRef.current) {
+      clearTimeout(turnCompleteTimerRef.current);
+      turnCompleteTimerRef.current = null;
+    }
+
+    turnCompleteTimerRef.current = setTimeout(() => {
+      turnCompleteTimerRef.current = null;
+      if (!isMountedRef.current) return;
+      if (!isActiveRef.current || isPausedRef.current) return;
+      if (mode !== 'continuous') return;
+
+      setIsSpeaking(false);
+      setIsResponding(false);
+      isSpeakingRef.current = false;
+      isRespondingRef.current = false;
+
+      if (isNativeListeningRef.current || isStartingRef.current || isStoppingRef.current) {
+        return;
+      }
+
+      addDebugLog('STT:Restart', 'after turn complete');
+      console.log("[STT:Restart] after turn complete");
+
+      if (startSpeechToTextRef.current) {
+        startSpeechToTextRef.current();
+      }
+    }, 300);
+  };
+
   // Keep refs synchronized with state
   useEffect(() => {
     isSpeakingRef.current = isSpeaking;
@@ -274,7 +319,13 @@ export default function LiveVoice() {
 
   // Clean up Web Audio and media stream on unmount
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
+      if (turnCompleteTimerRef.current) {
+        clearTimeout(turnCompleteTimerRef.current);
+        turnCompleteTimerRef.current = null;
+      }
       isNativeListeningRef.current = false;
       stopSession();
     };
@@ -283,7 +334,8 @@ export default function LiveVoice() {
   // Sync voice model and live endpoint to localStorage
   useEffect(() => {
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('sierra_live_voice_model', voiceModel);
+      const modelToSave = isGeminiLiveModel(voiceModel) ? voiceModel : 'gemini-3.8-live';
+      localStorage.setItem('sierra_live_voice_model', modelToSave);
       if (customVoiceModel.trim()) {
         localStorage.setItem('sierra_live_voice_custom_model', customVoiceModel.trim());
       } else {
@@ -727,6 +779,7 @@ export default function LiveVoice() {
         }
 
         addDebugLog('LiveWS:Connect', `Connecting to Gemini Live WebSocket: ${baseEndpoint} (model: ${formattedModel})`);
+        addDebugLog('LiveWS:ModelSelected', `Selected model: ${targetModel} (${formattedModel})`);
         console.log(`[LiveWS:Connect] Connecting to ${baseEndpoint} with model ${formattedModel}`);
 
         const ws = new WebSocketClass(wsUrl);
@@ -858,6 +911,11 @@ export default function LiveVoice() {
                     isPausedRef.current = false;
                     setIsPaused(false);
                     scheduleListeningRestart(PLAYBACK_COOLDOWN_MS);
+                  }
+                } else if (hadAudio) {
+                  turnCompletePendingRef.current = true;
+                  if (activeSourcesRef.current.length === 0) {
+                    handleTurnAudioCompleted();
                   }
                 }
               }
@@ -1781,6 +1839,10 @@ export default function LiveVoice() {
     }
   };
 
+  useEffect(() => {
+    startSpeechToTextRef.current = startSpeechToText;
+  });
+
   const teardownNativeListeners = async () => {
     isStoppingRef.current = true;
     if (nativeListenerRef.current) {
@@ -1988,6 +2050,7 @@ export default function LiveVoice() {
         if (activeSourcesRef.current.length === 0) {
           setIsSpeaking(false);
           isSpeakingRef.current = false;
+          handleTurnAudioCompleted();
         }
       };
     } catch (playbackErr) {
@@ -2012,12 +2075,17 @@ export default function LiveVoice() {
     });
     activeSourcesRef.current = [];
     nextPlayTimeRef.current = 0;
+    turnCompletePendingRef.current = false;
+    if (turnCompleteTimerRef.current) {
+      clearTimeout(turnCompleteTimerRef.current);
+      turnCompleteTimerRef.current = null;
+    }
     setIsSpeaking(false);
     isSpeakingRef.current = false;
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center h-full max-h-full bg-zinc-950 relative overflow-hidden font-sans p-3 sm:p-6">
+    <div className="flex-1 flex flex-col items-center h-full min-h-0 max-h-full bg-zinc-950 relative overflow-hidden font-sans p-3 sm:p-6">
       {/* Background Ambience */}
       <div className="absolute inset-0 pointer-events-none">
         <div className={cn(
@@ -2038,12 +2106,12 @@ export default function LiveVoice() {
           {/* Toggle Button for Debug Log (Fix 3: opens on demand rather than always visible inline) */}
           <button
             type="button"
-            onClick={() => setIsDebugLogOpen(true)}
+            onClick={() => setIsDebugLogOpen(!isDebugLogOpen)}
             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900/90 hover:bg-zinc-800 active:bg-zinc-750 border border-amber-500/30 text-[10px] font-semibold text-amber-300 transition-all shadow-sm active:scale-95 touch-manipulation"
-            title="Open Diagnostic Pipeline Logs"
+            title="Toggle Diagnostic Pipeline Logs"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            <span>Debug Log</span>
+            <span>Debug</span>
             {debugLogs.length > 0 && (
               <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-[9px] font-mono text-amber-300">
                 {debugLogs.length}
@@ -2354,7 +2422,7 @@ export default function LiveVoice() {
           {/* Backdrop click to close */}
           <div className="absolute inset-0" onClick={() => setIsDebugLogOpen(false)} />
 
-          <div className="relative z-10 bg-zinc-950 border border-amber-500/40 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col p-4 shadow-2xl space-y-3 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95">
+          <div className="relative z-10 bg-zinc-950 border border-amber-500/40 rounded-t-2xl sm:rounded-2xl w-full max-w-lg max-h-[30vh] flex flex-col p-4 shadow-2xl space-y-2 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95">
             {/* Header */}
             <div className="flex items-center justify-between pb-2 border-b border-zinc-800">
               <div className="flex items-center gap-1.5 text-amber-400">
@@ -2395,7 +2463,7 @@ export default function LiveVoice() {
             </div>
 
             {/* Log event scroll area */}
-            <div className="font-mono text-[10.5px] leading-relaxed flex-1 min-h-[160px] max-h-64 sm:max-h-80 overflow-y-auto space-y-1 pr-1 bg-black/60 p-2.5 rounded-xl border border-zinc-900">
+            <div className="font-mono text-[10.5px] leading-relaxed flex-1 min-h-0 overflow-y-auto space-y-1 pr-1 bg-black/60 p-2.5 rounded-xl border border-zinc-900">
               {debugLogs.length === 0 ? (
                 <p className="text-zinc-500 italic py-4 text-center font-sans text-xs">
                   No pipeline events logged yet. Tap the orb to trigger speech recognition.

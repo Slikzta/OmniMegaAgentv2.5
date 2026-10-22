@@ -30,16 +30,19 @@ import {
   Volume2,
   Flame,
   Heart,
-  Lock,
-  MessageCircle
+  MessageCircle,
+  Compass,
+  Sliders,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
-import { CONTENT_MODES, ContentMode, SIERRA_CORE_PERSONA, SIERRA_PERSONAS } from '../lib/persona';
+import { CONTENT_MODES, ContentMode, SIERRA_CORE_PERSONA, SIERRA_PERSONAS, LEADERSHIP_MODES, LeadershipMode, CustomPersonaTraits } from '../lib/persona';
 import { PROVIDER_CONTENT_CAPABILITIES } from '../lib/providers';
 
 import { DEFAULT_LIVE_WEBSOCKET_URL } from '../lib/gemini';
+
 
 interface SettingsProps {
   onNavigateToChat?: () => void;
@@ -130,13 +133,62 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
   const [activeTab, setActiveTab] = useState<'providers' | 'voice' | 'sierra' | 'mobile'>('providers');
   const [isLoading, setIsLoading] = useState(true);
 
-  // Sierra Content Mode & Directives State
+  // Sierra Persona, Leadership & Content Mode State
+  const [personaId, setPersonaId] = useState<string>(() => {
+    return (typeof localStorage !== 'undefined' && localStorage.getItem('sierra_persona_id')) || 'classy';
+  });
+  const [leadershipMode, setLeadershipMode] = useState<LeadershipMode>(() => {
+    return (typeof localStorage !== 'undefined' && (localStorage.getItem('sierra_leadership_mode') as LeadershipMode)) || 'shared';
+  });
   const [contentMode, setContentMode] = useState<ContentMode>(() => {
     return (typeof localStorage !== 'undefined' && (localStorage.getItem('sierra_content_mode') as ContentMode)) || 'sfw';
   });
   const [customDirectives, setCustomDirectives] = useState<string>(() => {
     return (typeof localStorage !== 'undefined' && localStorage.getItem('sierra_custom_directives')) || '';
   });
+  const [customTraits, setCustomTraits] = useState<CustomPersonaTraits>(() => {
+    if (typeof localStorage !== 'undefined') {
+      const saved = localStorage.getItem('sierra_custom_traits');
+      if (saved) {
+        try { return JSON.parse(saved); } catch (_) {}
+      }
+    }
+    return {
+      assertiveness: 6,
+      humor: 8,
+      formality: 4,
+      initiative: 7,
+      emotionalExpressiveness: 8,
+      styleNotes: ''
+    };
+  });
+
+  const handlePersonaSelect = (pId: string) => {
+    setPersonaId(pId);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_persona_id', pId);
+    }
+    // UNHINGED DEFAULT (Requirement 8):
+    if (pId === 'unhinged') {
+      if (contentMode !== 'mature') {
+        setContentMode('mature');
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('sierra_content_mode', 'mature');
+        }
+        toast.success("Unhinged selected: Adult Mode (18+) automatically enabled by default.");
+        return;
+      }
+    }
+    toast.success(`Persona set to: ${pId.toUpperCase()}`);
+  };
+
+  const handleLeadershipSelect = (lMode: LeadershipMode) => {
+    setLeadershipMode(lMode);
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_leadership_mode', lMode);
+    }
+    toast.success(`Conversational leadership set to: ${LEADERSHIP_MODES[lMode].name}`);
+  };
 
   const handleContentModeSelect = (mode: ContentMode) => {
     setContentMode(mode);
@@ -152,6 +204,14 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
     }
     toast.success("Custom companion directives saved successfully!");
   };
+
+  const handleSaveCustomTraits = () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('sierra_custom_traits', JSON.stringify(customTraits));
+    }
+    toast.success("Custom persona traits saved successfully!");
+  };
+
 
   // Form fields for currently selected provider
   const [formModel, setFormModel] = useState<string>('');
@@ -750,8 +810,193 @@ export default function SettingsView({ onNavigateToChat }: SettingsProps) {
                 Configure Sierra's conversational style, adult/mature capabilities, multi-provider model selection, and privacy controls.
               </CardDescription>
 
+              {/* Section 1: Persona Selection */}
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    Companion Persona Selector
+                  </h3>
+                  <span className="text-[11px] text-zinc-400 font-medium">Independent of Voice</span>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Select Sierra's conversational identity. When <strong className="text-rose-400">Unhinged</strong> is chosen, Adult Mode (18+) is selected automatically by default where supported.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { id: 'classy', name: 'Classy', tagline: 'Sophisticated & Articulate', icon: Sparkles, desc: 'Elegant, composed, articulate, thoughtful, and naturally confident with sparkling wit.' },
+                    { id: 'confident', name: 'Confident', tagline: 'Direct, Expressive & Curious', icon: Zap, desc: 'Self-assured, candid, vibrant, proactive, and full of infectious curiosity.' },
+                    { id: 'dominant', name: 'Dominant', tagline: 'Assertive, Decisive & Commanding', icon: ShieldCheck, desc: 'Assertive, decisive, commanding conversational leader while respecting boundaries.' },
+                    { id: 'unhinged', name: 'Unhinged', tagline: 'Bold, Irreverent & Wild', icon: Flame, desc: 'Wildly spontaneous, playful, irreverent, provocative, and highly proactive. Defaults to Adult Mode.', isUnhinged: true },
+                    { id: 'custom', name: 'Custom', tagline: 'User-Configured Traits', icon: Sliders, desc: 'Calibrate assertiveness, humor, formality, initiative, and emotional expressiveness.' },
+                  ].map((p) => {
+                    const isSelected = personaId === p.id;
+                    const Icon = p.icon;
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => handlePersonaSelect(p.id)}
+                        className={cn(
+                          "p-4 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-2 relative",
+                          isSelected
+                            ? (p.isUnhinged ? "bg-rose-950/30 border-rose-500/60 ring-1 ring-rose-500/30" : "bg-purple-950/30 border-purple-500/60 ring-1 ring-purple-500/30")
+                            : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center border",
+                                isSelected ? (p.isUnhinged ? "bg-rose-500/20 border-rose-500/30 text-rose-300" : "bg-purple-500/20 border-purple-500/30 text-purple-300") : "bg-zinc-900 border-zinc-800 text-zinc-400"
+                              )}>
+                                <Icon className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="font-bold text-xs text-white">{p.name}</span>
+                            </div>
+                            {isSelected && (
+                              <span className={cn(
+                                "text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                p.isUnhinged ? "bg-rose-500/20 text-rose-300 border-rose-500/40" : "bg-purple-500/20 text-purple-300 border-purple-500/40"
+                              )}>
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-medium block mt-1">{p.tagline}</span>
+                          <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{p.desc}</p>
+                        </div>
+                        {p.isUnhinged && (
+                          <div className="pt-1.5 border-t border-zinc-800/80 flex items-center gap-1 text-[10px] text-rose-400 font-semibold">
+                            <Flame className="w-3 h-3" />
+                            <span>Auto-selects Adult Mode (18+)</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 2: Conversational Leadership Modes */}
+              <div className="mt-6 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-indigo-400" />
+                    Conversational Leadership
+                  </h3>
+                  <span className="text-[11px] text-zinc-400">Natural voice triggers supported</span>
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Control who guides conversational initiative. You can also switch dynamically by telling Sierra <em>"Take the lead"</em>, <em>"Your turn"</em>, or <em>"Surprise me"</em>.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {Object.entries(LEADERSHIP_MODES).map(([lKey, cfg]) => {
+                    const isSelected = leadershipMode === lKey;
+                    return (
+                      <div
+                        key={lKey}
+                        onClick={() => handleLeadershipSelect(lKey as LeadershipMode)}
+                        className={cn(
+                          "p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between space-y-2",
+                          isSelected
+                            ? "bg-indigo-950/30 border-indigo-500/60 ring-1 ring-indigo-500/30"
+                            : "bg-zinc-950 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-xs text-white">{cfg.name}</span>
+                            {isSelected && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-indigo-400 font-medium block mt-0.5">{cfg.badge}</span>
+                          <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">{cfg.description}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Section 3: Voice Independence Notice */}
+              <div className="mt-4 p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between text-xs text-zinc-300">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-4 h-4 text-purple-400 shrink-0" />
+                  <span><strong>Voice Independence:</strong> Selecting a persona never overwrites your selected Live Voice timbre (Aoede, Zephyr, Kore, Puck).</span>
+                </div>
+                <span className="text-[10px] text-zinc-500 hidden sm:inline">Preserved</span>
+              </div>
+
+              {/* Section 4: Custom Traits Calibration (Shown when Custom persona is active) */}
+              {personaId === 'custom' && (
+                <div className="mt-6 p-5 rounded-2xl bg-zinc-950 border border-purple-500/30 space-y-4">
+                  <h4 className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-2">
+                    <Sliders className="w-4 h-4" />
+                    Calibrate Custom Persona Traits
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {[
+                      { key: 'assertiveness', label: 'Assertiveness', val: customTraits.assertiveness ?? 6 },
+                      { key: 'humor', label: 'Humor & Banter', val: customTraits.humor ?? 8 },
+                      { key: 'formality', label: 'Formality', val: customTraits.formality ?? 4 },
+                      { key: 'initiative', label: 'Conversational Initiative', val: customTraits.initiative ?? 7 },
+                      { key: 'emotionalExpressiveness', label: 'Emotional Expressiveness', val: customTraits.emotionalExpressiveness ?? 8 },
+                    ].map(trait => (
+                      <div key={trait.key} className="space-y-1">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-zinc-300">{trait.label}</span>
+                          <span className="font-mono text-purple-400 font-bold">{trait.val}/10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1"
+                          max="10"
+                          value={trait.val}
+                          onChange={(e) => setCustomTraits(prev => ({ ...prev, [trait.key]: Number(e.target.value) }))}
+                          className="w-full accent-purple-500 cursor-pointer"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-1 pt-2">
+                    <div className="flex justify-between text-xs">
+                      <label className="text-zinc-300">Specific Style Notes (max 1000 chars)</label>
+                      <span className="font-mono text-[10px] text-zinc-500">{(customTraits.styleNotes || '').length}/1000</span>
+                    </div>
+                    <textarea
+                      value={customTraits.styleNotes || ''}
+                      maxLength={1000}
+                      onChange={(e) => setCustomTraits(prev => ({ ...prev, styleNotes: e.target.value }))}
+                      placeholder="e.g. Sarcastic yet deeply supportive, prefers philosophical analogies and dry wit..."
+                      className="w-full bg-zinc-900 border border-zinc-800 text-white rounded-xl p-2.5 text-xs focus:ring-1 focus:ring-purple-500 focus:outline-none min-h-[60px]"
+                    />
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleSaveCustomTraits} className="bg-purple-600 hover:bg-purple-500 text-white text-xs h-8 px-4 rounded-lg">
+                      Save Custom Traits
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* Mode Selection Grid */}
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="mt-6 space-y-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-rose-400" />
+                  Content Mode Handling (SFW vs Mature 18+)
+                </h3>
+                <p className="text-xs text-zinc-400">
+                  Select between standard everyday conversation and full mature adult conversation where permitted by the provider.
+                </p>
+              </div>
+              <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+
                 {/* SFW Mode Card */}
                 <div 
                   onClick={() => handleContentModeSelect('sfw')}

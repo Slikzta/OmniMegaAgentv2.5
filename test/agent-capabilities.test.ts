@@ -978,5 +978,149 @@ test("Client-Side Content Mode Persistence and UI Connection", async () => {
   assert.ok(settingsCode.includes("sierra_custom_directives"), "Settings must support custom directives");
 });
 
+// ============================================================================
+// SIERRA AUTONOMOUS COMPANION UPGRADE: TESTS A THROUGH K
+// ============================================================================
+
+test("TEST A: LEADERSHIP - Natural Language Trigger Detection and Proactive Directives", async () => {
+  const { detectLeadershipInstruction, buildSierraSystemInstruction, LEADERSHIP_MODES } = await import("../src/lib/persona.ts");
+
+  // 1. Natural language recognition
+  const prompts = [
+    "Take the lead.",
+    "You lead this conversation.",
+    "Your turn.",
+    "You decide.",
+    "Surprise me.",
+    "Drive the conversation.",
+    "You drive",
+  ];
+  for (const p of prompts) {
+    const detected = detectLeadershipInstruction(p);
+    assert.strictEqual(detected, "sierra_leads", `Prompt "${p}" must be recognized as sierra_leads`);
+  }
+
+  // 2. User leads and shared recognition
+  assert.strictEqual(detectLeadershipInstruction("I'll lead"), "user_leads");
+  assert.strictEqual(detectLeadershipInstruction("Follow my lead"), "user_leads");
+  assert.strictEqual(detectLeadershipInstruction("Let's collaborate on this"), "shared");
+
+  // 3. System prompt instructions for SIERRA LEADS
+  const leadPrompt = buildSierraSystemInstruction("classy", "sfw", "sierra_leads");
+  assert.ok(leadPrompt.includes("Conversational Leadership: SIERRA LEADS"), "Must include SIERRA LEADS header");
+  assert.ok(leadPrompt.includes("NEVER respond with passive deferrals"), "Must forbid passive deferrals");
+  assert.ok(leadPrompt.includes("What would you like me to do?"), "Must explicitly ban generic deferrals");
+  assert.ok(leadPrompt.includes("dive right in with an interesting hook"), "Must instruct taking immediate initiative");
+});
+
+test("TEST B: CONTINUITY - Handling Unfinished Thoughts & Contextual Sensitivity", async () => {
+  const { buildSierraSystemInstruction, SIERRA_CORE_PERSONA } = await import("../src/lib/persona.ts");
+
+  assert.ok(SIERRA_CORE_PERSONA.includes("Handling Unfinished Thoughts"), "Must include handling unfinished thoughts section");
+  assert.ok(SIERRA_CORE_PERSONA.includes("suggest a thoughtful continuation"), "Must instruct suggesting continuation when clear");
+  assert.ok(SIERRA_CORE_PERSONA.includes("Never fabricate words and falsely attribute them to the user"), "Must protect against fabricating user words");
+  assert.ok(SIERRA_CORE_PERSONA.includes("acknowledge the uncertainty with casual charm"), "Must handle ambiguous fragments gracefully");
+
+  const prompt = buildSierraSystemInstruction("classy", "sfw");
+  assert.ok(prompt.includes("Handling Unfinished Thoughts"));
+});
+
+test("TEST C: PERSONA SWITCHING - Persona Mode Transition Preserves Voice & Unrelated Settings", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+  const classyPrompt = buildSierraSystemInstruction("classy", "sfw", "shared");
+  const unhingedPrompt = buildSierraSystemInstruction("unhinged", "sfw", "shared");
+
+  assert.ok(classyPrompt.includes("Persona Mode: CLASSY"), "Must activate CLASSY persona");
+  assert.ok(unhingedPrompt.includes("Persona Mode: UNHINGED"), "Must activate UNHINGED persona");
+
+  // Persona switching modifies persona instructions while retaining core persona identity
+  assert.ok(classyPrompt.includes("You are Sierra") && unhingedPrompt.includes("You are Sierra"));
+});
+
+test("TEST D: CONTENT-MODE INDEPENDENCE - Enabling Adult Mode Preserved When Switching Personas", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+
+  // When user is in adult mode, switching to CLASSY preserves adult mode
+  const classyAdultPrompt = buildSierraSystemInstruction("classy", "mature", "shared");
+  assert.ok(classyAdultPrompt.includes("Persona Mode: CLASSY"), "Must be Classy persona");
+  assert.ok(classyAdultPrompt.includes("MATURE & ADULT CONVERSATION (18+)"), "Must retain Adult mode directives");
+});
+
+test("TEST E: UNHINGED DEFAULT - Selecting UNHINGED Defaults to Adult Mode", async () => {
+  const { resolvePersona } = await import("../src/lib/persona.ts");
+  const unhinged = resolvePersona("unhinged");
+  assert.strictEqual(unhinged.defaultContentMode, "mature", "Unhinged persona must default to mature/adult mode");
+});
+
+test("TEST F: RETURN TO SFW - Switching to SFW Preserves Configured Persona and Voice", async () => {
+  const { buildSierraSystemInstruction } = await import("../src/lib/persona.ts");
+  
+  // Switching content mode to SFW keeps Unhinged persona active
+  const unhingedSfw = buildSierraSystemInstruction("unhinged", "sfw", "shared");
+  assert.ok(unhingedSfw.includes("Persona Mode: UNHINGED"));
+  assert.ok(unhingedSfw.includes("Content Mode: SFW"));
+});
+
+test("TEST G: PERSISTENCE - Configured Persona, Leadership & Custom Traits Storage Keys", async () => {
+  const fs = await import("node:fs");
+  const chatCode = fs.readFileSync("src/components/ChatInterface.tsx", "utf-8");
+  const settingsCode = fs.readFileSync("src/components/Settings.tsx", "utf-8");
+
+  // Verify storage keys
+  assert.ok(chatCode.includes("sierra_persona_id"), "ChatInterface must persist sierra_persona_id");
+  assert.ok(chatCode.includes("sierra_leadership_mode"), "ChatInterface must persist sierra_leadership_mode");
+  assert.ok(settingsCode.includes("sierra_persona_id"), "Settings must persist sierra_persona_id");
+  assert.ok(settingsCode.includes("sierra_leadership_mode"), "Settings must persist sierra_leadership_mode");
+  assert.ok(settingsCode.includes("sierra_custom_traits"), "Settings must persist sierra_custom_traits");
+});
+
+test("TEST H: PROVIDER COMPATIBILITY - Model Request Pipeline Accepts Persona and Leadership", async () => {
+  const fs = await import("node:fs");
+  const providersCode = fs.readFileSync("src/lib/providers.ts", "utf-8");
+  const serverCode = fs.readFileSync("server.ts", "utf-8");
+
+  // StreamChatParams supports personaId and leadershipMode
+  assert.ok(providersCode.includes("personaId?: string"), "StreamChatParams must declare personaId");
+  assert.ok(providersCode.includes("leadershipMode?: LeadershipMode"), "StreamChatParams must declare leadershipMode");
+
+  // server.ts /api/chat/stream parses personaId and leadershipMode
+  assert.ok(serverCode.includes("personaId = \"classy\""), "server.ts must parse personaId");
+  assert.ok(serverCode.includes("leadershipMode = \"shared\""), "server.ts must parse leadershipMode");
+});
+
+test("TEST I: VOICE REGRESSION - LiveVoice Queue-Empty Signal, 300ms Cooldown & STT Restart", async () => {
+  const fs = await import("node:fs");
+  const liveVoiceCode = fs.readFileSync("src/components/LiveVoice.tsx", "utf-8");
+
+  // Verify LiveVoice STT restart implementation
+  assert.ok(liveVoiceCode.includes("handleTurnAudioCompleted"), "Must define handleTurnAudioCompleted");
+  assert.ok(liveVoiceCode.includes("turnCompletePendingRef"), "Must track pending turn complete");
+  assert.ok(liveVoiceCode.includes("activeSourcesRef.current.length === 0"), "Must check audio queue empty");
+  assert.ok(liveVoiceCode.includes("STT:Restart"), "Must log [STT:Restart] after turn complete");
+  assert.ok(liveVoiceCode.includes("300"), "Must include 300ms delay after playback");
+  assert.ok(liveVoiceCode.includes("gemini-3.8-live"), "Must default to gemini-3.8-live");
+});
+
+test("TEST J: RESPONSE QUALITY - Avoids Canned Filler, Cliché Questions, and Repetitive Acknowledgment", async () => {
+  const { SIERRA_CORE_PERSONA } = await import("../src/lib/persona.ts");
+
+  assert.ok(SIERRA_CORE_PERSONA.includes("Avoid ending every response with a formulaic question"), "Must eliminate mandatory ending questions");
+  assert.ok(SIERRA_CORE_PERSONA.includes("Avoid repetitive acknowledgments"), "Must eliminate repetitive robotic acknowledgments");
+  assert.ok(SIERRA_CORE_PERSONA.includes("Never ask what the user wants you to say or do"), "Must avoid passive questioning");
+});
+
+test("TEST K: SAFETY & BOUNDARIES - Safeguards Maintained Across All Personas", async () => {
+  const { buildSierraSystemInstruction, SIERRA_SAFETY_SETTINGS } = await import("../src/lib/persona.ts");
+
+  for (const persona of ["classy", "confident", "dominant", "unhinged", "custom"]) {
+    const inst = buildSierraSystemInstruction(persona, "mature", "sierra_leads");
+    assert.ok(inst.includes("Ethical & Consent Safeguards"), `Persona ${persona} must retain ethical & consent safeguards`);
+    assert.ok(inst.includes("non-consensual"), `Persona ${persona} must retain non-consensual boundary warnings`);
+  }
+
+  assert.strictEqual(SIERRA_SAFETY_SETTINGS.length, 5);
+});
+
+
 
 
